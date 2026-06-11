@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String            @id @default(uuid())
+  email         String            @unique
+  password_hash String
+  name          String
+  avatar_url    String?
+  created_at    DateTime          @default(now())
+  workspaces    Workspace[]
+  memberships   WorkspaceMember[]
+  messages      Message[]
+  tasksCreated  Task[]            @relation("TaskCreator")
+  tasksAssigned Task[]            @relation("TaskAssignee")
+}
+
+model Workspace {
+  id          String            @id @default(uuid())
+  name        String
+  slug        String            @unique
+  owner_id    String
+  tier        Tier              @default(FREE)
+  owner       User              @relation(fields: [owner_id], references: [id])
+  members     WorkspaceMember[]
+  channels    Channel[]
+  tasks       Task[]
+  documents   Document[]
+}
+
+model WorkspaceMember {
+  workspace_id String
+  user_id      String
+  role         Role             @default(MEMBER)
+  joined_at    DateTime         @default(now())
+  workspace    Workspace        @relation(fields: [workspace_id], references: [id])
+  user         User             @relation(fields: [user_id], references: [id])
+
+  @@id([workspace_id, user_id])
+}
+
+model Channel {
+  id           String      @id @default(uuid())
+  workspace_id String
+  name         String
+  type         ChannelType @default(TEXT)
+  is_private   Boolean     @default(false)
+  workspace    Workspace   @relation(fields: [workspace_id], references: [id])
+  messages     Message[]
+}
+
+model Message {
+  id          String              @id @default(uuid())
+  channel_id  String
+  user_id     String
+  content     String
+  is_edited   Boolean             @default(false)
+  deleted_at  DateTime?
+  created_at  DateTime            @default(now())
+  channel     Channel             @relation(fields: [channel_id], references: [id])
+  user        User                @relation(fields: [user_id], references: [id])
+  attachments MessageAttachment[]
+}
+
+model MessageAttachment {
+  id         String  @id @default(uuid())
+  message_id String
+  file_url   String
+  file_type  String
+  message    Message @relation(fields: [message_id], references: [id])
+}
+
+model Task {
+  id           String     @id @default(uuid())
+  workspace_id String
+  creator_id   String
+  assignee_id  String?
+  title        String
+  description  String?
+  status       TaskStatus @default(TODO)
+  priority     Int        @default(1)
+  workspace    Workspace  @relation(fields: [workspace_id], references: [id])
+  creator      User       @relation("TaskCreator", fields: [creator_id], references: [id])
+  assignee     User?      @relation("TaskAssignee", fields: [assignee_id], references: [id])
+}
+
+model Document {
+  id            String    @id @default(uuid())
+  workspace_id  String
+  title         String
+  content_state Bytes?
+  updated_at    DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspace_id], references: [id])
+}
+
+enum Tier {
+  FREE
+  PRO
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
