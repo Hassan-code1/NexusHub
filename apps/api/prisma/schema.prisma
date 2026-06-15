@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,39 +10,49 @@ datasource db {
 }
 
 model User {
-  id            String            @id @default(uuid())
-  email         String            @unique
+  id            String   @id @default(uuid())
+  email         String   @unique
   password_hash String
   name          String
   avatar_url    String?
-  created_at    DateTime          @default(now())
+  created_at    DateTime @default(now())
+
   workspaces    Workspace[]
   memberships   WorkspaceMember[]
   messages      Message[]
   tasksCreated  Task[]            @relation("TaskCreator")
   tasksAssigned Task[]            @relation("TaskAssignee")
+
+  sessions      Session[]
+  notifications Notification[]
 }
 
 model Workspace {
-  id          String            @id @default(uuid())
-  name        String
-  slug        String            @unique
-  owner_id    String
-  tier        Tier              @default(FREE)
-  owner       User              @relation(fields: [owner_id], references: [id])
-  members     WorkspaceMember[]
-  channels    Channel[]
-  tasks       Task[]
-  documents   Document[]
+  id       String @id @default(uuid())
+  name     String
+  slug     String @unique
+  owner_id String
+  tier     Tier   @default(FREE)
+
+  owner     User              @relation(fields: [owner_id], references: [id])
+  members   WorkspaceMember[]
+  channels  Channel[]
+  tasks     Task[]
+  documents Document[]
+
+  subscription Subscription? // 1-to-1 relation (because workspace_id is @unique in Subscription)
+  payments     Payment[] // 1-to-many
+  ai_requests  AiRequest[] // 1-to-many
+  files        File[] // 1-to-many
 }
 
 model WorkspaceMember {
   workspace_id String
   user_id      String
-  role         Role             @default(MEMBER)
-  joined_at    DateTime         @default(now())
-  workspace    Workspace        @relation(fields: [workspace_id], references: [id])
-  user         User             @relation(fields: [user_id], references: [id])
+  role         Role      @default(MEMBER)
+  joined_at    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id])
+  user         User      @relation(fields: [user_id], references: [id])
 
   @@id([workspace_id, user_id])
 }
@@ -124,4 +132,61 @@ enum TaskStatus {
   IN_PROGRESS
   REVIEW
   DONE
+}
+
+model Session {
+  id            String   @id @default(uuid())
+  user_id       String
+  refresh_token String   @unique
+  expires_at    DateTime
+  created_at    DateTime @default(now())
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  user_id    String
+  message    String
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id           String    @id @default(uuid())
+  workspace_id String    @unique
+  plan_tier    Tier      @default(FREE)
+  stripe_id    String?
+  razorpay_id  String?
+  valid_until  DateTime?
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id           String    @id @default(uuid())
+  workspace_id String
+  amount       Float
+  currency     String    @default("INR")
+  status       String
+  created_at   DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+model AiRequest {
+  id           String    @id @default(uuid())
+  workspace_id String
+  prompt       String
+  tokens_used  Int
+  created_at   DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+model File {
+  id           String    @id @default(uuid())
+  workspace_id String
+  uploader_id  String
+  file_url     String
+  size_bytes   Int
+  created_at   DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }

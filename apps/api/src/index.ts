@@ -2,17 +2,24 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+
 import { env } from './config/env';
 import { logger } from './config/logger';
+
 import { errorHandler } from './middlewares/errorHandler';
-import healthRouter from './routes/health';
+
 import { verifyDatabaseConnection } from './utils/db'; // Import the new DB utility
+
+import healthRouter from './routes/health';
+import authRouter from './routes/auth';
 
 const app = express();
 
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 app.use(
   morgan('dev', {
@@ -21,6 +28,7 @@ app.use(
 );
 
 app.use('/api/health', healthRouter);
+app.use('/api/auth/', authRouter);
 
 app.use(errorHandler);
 
