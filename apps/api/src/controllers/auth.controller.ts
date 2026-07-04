@@ -3,8 +3,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '../utils/db'
 import { env } from '../config/env'
-import { success } from 'zod'
-import { id } from 'zod/v4/locales'
+
 
 export const registerUser = async (req : Request, res : Response, next: NextFunction) => {
     try {

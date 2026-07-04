@@ -1,0 +1,40 @@
+# API Dependencies — apps/api
+
+## Runtime Dependencies
+
+| Package                    | Version    | Purpose                                              |
+|----------------------------|------------|------------------------------------------------------|
+| @prisma/adapter-pg         | ^7.8.0     | Prisma adapter for native PostgreSQL (pg driver)     |
+| @prisma/client             | ^7.8.0     | Prisma ORM client for database queries               |
+| bcryptjs                   | ^3.0.3     | Password hashing (bcrypt in pure JS)                 |
+| cookie-parser              | ^1.4.7     | Parse Cookie header into req.cookies                 |
+| cors                       | ^2.8.6     | Cross-Origin Resource Sharing middleware             |
+| dotenv                     | ^17.4.2    | Load environment variables from .env file            |
+| express                    | ^5.2.1     | HTTP server framework                                |
+| helmet                     | ^8.2.0     | Security HTTP headers middleware                     |
+| jsonwebtoken               | ^9.0.3     | Sign and verify JWT access/refresh tokens            |
+| morgan                     | ^1.11.0    | HTTP request logger middleware                       |
+| passport                   | ^0.7.0     | Authentication middleware framework                  |
+| passport-google-oauth20    | ^2.0.0     | Google OAuth 2.0 strategy for Passport               |
+| pg                         | ^8.21.0    | PostgreSQL client (used by Prisma pg adapter)        |
+| winston                    | ^3.19.0    | Structured logging library                           |
+| zod                        | ^4.4.3     | Schema validation for env variables                  |
+
+## Dev Dependencies
+
+| Package                          | Version    | Purpose                                        |
+|----------------------------------|------------|------------------------------------------------|
+| @types/bcryptjs                  | ^3.0.0     | TypeScript types for bcryptjs                  |
+| @types/cookie-parser             | ^1.4.10    | TypeScript types for cookie-parser             |
+| @types/cors                      | ^2.8.19    | TypeScript types for cors                      |
+| @types/express                   | ^5.0.6     | TypeScript types for express                   |
+| @types/jsonwebtoken              | ^9.0.10    | TypeScript types for jsonwebtoken              |
+| @types/morgan                    | ^1.9.10    | TypeScript types for morgan                    |
+| @types/node                      | ^20.19.41  | TypeScript types for Node.js                   |
+| @types/passport                  | ^1.0.17    | TypeScript types for passport                  |
+| @types/passport-google-oauth20   | ^2.0.17    | TypeScript types for passport-google-oauth20   |
+| @types/pg                        | ^8.20.0    | TypeScript types for pg                        |
+| prisma                           | ^7.8.0     | Prisma CLI (migrations, generate, studio)      |
+| tsup                             | ^8.5.1     | TypeScript bundler / build tool                |
+| tsx                              | ^4.22.4    | TypeScript execution for dev (ts-node alt)     |
+| typescript                       | ^5.9.3     | TypeScript compiler                            |

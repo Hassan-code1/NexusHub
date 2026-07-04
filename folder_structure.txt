@@ -1,0 +1,69 @@
+NexusHub/
+├── apps/
+│   ├── api/
+│   │   ├── prisma/
+│   │   │   ├── migrations/
+│   │   │   │   ├── 20260611120830_init_core_schema/
+│   │   │   │   │   └── migration.sql
+│   │   │   │   ├── 20260611132338_add_saas_models/
+│   │   │   │   │   └── migration.sql
+│   │   │   │   └── migration_lock.toml
+│   │   │   └── schema.prisma
+│   │   ├── src/
+│   │   │   ├── config/
+│   │   │   │   ├── env.ts
+│   │   │   │   └── logger.ts
+│   │   │   ├── controllers/
+│   │   │   │   ├── auth.controller.ts
+│   │   │   │   └── oauth.controller.ts
+│   │   │   ├── middlewares/
+│   │   │   │   ├── errorHandler.ts
+│   │   │   │   └── requireAuth.ts
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.ts
+│   │   │   │   └── health.ts
+│   │   │   ├── utils/
+│   │   │   │   └── db.ts
+│   │   │   └── index.ts
+│   │   ├── package.json
+│   │   └── prisma.config.ts
+│   └── web/
+│   │   ├── public/
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── (auth)/
+│   │   │   │   │   └── login/
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   ├── favicon.ico
+│   │   │   │   ├── globals.css
+│   │   │   │   ├── layout.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── components/
+│   │   │   │   └── ui/
+│   │   │   │   │   └── button.tsx
+│   │   │   ├── lib/
+│   │   │   │   ├── axios.ts
+│   │   │   │   └── utils.ts
+│   │   │   └── stores/
+│   │   │   │   └── authStore.ts
+│   │   ├── components.json
+│   │   ├── eslint.config.mjs
+│   │   ├── next-env.d.ts
+│   │   ├── next.config.ts
+│   │   ├── package.json
+│   │   ├── pnpm-lock.yaml
+│   │   ├── postcss.config.mjs
+│   │   ├── README.md
+│   │   └── tsconfig.json
+├── docs/
+├── packages/
+│   ├── config/
+│   ├── types/
+│   │   └── src/
+│   │   │   └── index.ts
+│   └── ui/
+├── docker-compose.yml
+├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+└── turbo.json
