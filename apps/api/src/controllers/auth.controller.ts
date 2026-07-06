@@ -5,6 +5,8 @@ import prisma from '../utils/db'
 import { env } from '../config/env'
 import { success } from 'zod'
 import { id } from 'zod/v4/locales'
+import { sendPasswordResetEmail } from '../utils/email';
+import crypto from 'crypto';
 
 export const registerUser = async (req : Request, res : Response, next: NextFunction) => {
     try {
@@ -61,6 +63,74 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
         res.status(200).json({success: true, accessToken });
     } catch (error) {
         next(error)
+    }
+};
+
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try{
+        const {email} = req.body;
+        const user = await prisma.user.findUnique({where : {email}});
+
+        if(!user){
+            // Return 200 even if user doesn't exist to prevent email enumeration attacks
+            return res.status(200).json({ success: true, message: 'If an account exists, an OTP has been sent.' });
+        }
+
+        // Generate a secure 6-digit numeric OTP (100000 to 999999)
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        await prisma.user.update({
+            where: {email},
+            data: {
+                reset_otp: otp,
+                reset_otp_expires: otpExpires,
+            },
+        });
+
+        // Send email
+        await sendPasswordResetEmail(email, otp);
+
+        res.status(200).json({ success: true, message: 'If an account exists, an OTP has been sent.' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try{
+        const {email, otp, newPassword} = req.body;
+
+        const user = await prisma.user.findFirst({
+            where: {
+                email: email,
+                reset_otp: otp,
+                reset_otp_expires: { gt: new Date() },
+            },
+        });
+
+        if(!user){
+            return res.status(400).json({ success: false, message: 'Invalid or expired otp.' })
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await prisma.user.update({
+            where: {id: user.id},
+            data:{
+                password_hash: hashedPassword,
+                reset_otp: null,
+                reset_otp_expires: null,
+            },
+        });
+
+        // delete all active sessions to force re login
+        await prisma.session.deleteMany({where: {user_id: user.id}});
+
+        res.status(200).json({ success: true, message: 'Password has been reset successfully.' });
+    }catch(error){
+        next(error);
     }
 };
 

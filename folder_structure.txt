@@ -7,6 +7,10 @@ NexusHub/
 │   │   │   │   │   └── migration.sql
 │   │   │   │   ├── 20260611132338_add_saas_models/
 │   │   │   │   │   └── migration.sql
+│   │   │   │   ├── 20260704101242_add_reset_token/
+│   │   │   │   │   └── migration.sql
+│   │   │   │   ├── 20260706113459_switch_to_otp/
+│   │   │   │   │   └── migration.sql
 │   │   │   │   └── migration_lock.toml
 │   │   │   └── schema.prisma
 │   │   ├── src/
@@ -17,12 +21,14 @@ NexusHub/
 │   │   │   │   └── auth.controller.ts
 │   │   │   ├── middlewares/
 │   │   │   │   ├── errorHandler.ts
+│   │   │   │   ├── rateLimiter.ts
 │   │   │   │   └── requireAuth.ts
 │   │   │   ├── routes/
 │   │   │   │   ├── auth.ts
 │   │   │   │   └── health.ts
 │   │   │   ├── utils/
-│   │   │   │   └── db.ts
+│   │   │   │   ├── db.ts
+│   │   │   │   └── email.ts
 │   │   │   └── index.ts
 │   │   ├── package.json
 │   │   └── prisma.config.ts
@@ -56,6 +62,7 @@ NexusHub/
 │   │   │   └── index.ts
 │   └── ui/
 ├── docker-compose.yml
+├── folder_structure.txt
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
