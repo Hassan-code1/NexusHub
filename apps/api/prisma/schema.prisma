@@ -25,6 +25,9 @@ model User {
 
   sessions      Session[]
   notifications Notification[]
+
+  reset_otp         String?
+  reset_otp_expires DateTime?
 }
 
 model Workspace {
