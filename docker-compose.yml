@@ -1,4 +1,26 @@
+# =============================================================================
+# NexusHub — Docker Compose (Local Development Infrastructure)
+# =============================================================================
+# Starts three infrastructure services required to run the API locally.
+# Run with: docker compose up -d
+#
+# Services:
+#  postgres  — Primary relational database (PostgreSQL 15)
+#  redis     — In-memory store used by the Redis-backed rate limiter
+#  rabbitmq  — Message broker (reserved for future background job queues)
+#
+# Note: Application code (API, Web) is NOT run inside Docker in development.
+#       Use `pnpm dev` from the repo root to start Next.js and Express locally.
+# =============================================================================
+
 services:
+
+  # ---------------------------------------------------------------------------
+  # postgres — PostgreSQL 15 (Alpine, minimal image)
+  # Credentials match the DATABASE_URL in apps/api/.env
+  # Host port 5433 is used to avoid conflicts with any local PostgreSQL instance.
+  # Data is persisted to the named volume `postgres_data` across restarts.
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
     environment:
@@ -6,20 +28,31 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexushub
     ports:
-      - "5433:5432"
+      - "5433:5432"    # host:container — connect via localhost:5433
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # ---------------------------------------------------------------------------
+  # redis — Redis 7 (Alpine)
+  # Used by the rate limiter in apps/api/src/middlewares/rateLimiter.ts.
+  # No persistence configured — rate limit counters reset on container restart.
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6379:6379"    # host:container — default Redis port
 
+  # ---------------------------------------------------------------------------
+  # rabbitmq — RabbitMQ 3 with management UI
+  # Reserved for future background job processing (e.g. email queues, AI tasks).
+  # Management UI available at: http://localhost:15672 (guest / guest)
+  # ---------------------------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"     # AMQP protocol port
+      - "15672:15672"   # Web management UI port
 
+# Named volume for PostgreSQL data persistence
 volumes:
   postgres_data:

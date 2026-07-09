@@ -1,3 +1,24 @@
+/**
+ * @file email.ts  (utils/email.ts)
+ * @description SMTP email delivery utility using Nodemailer.
+ *
+ * Currently supports:
+ *  - sendPasswordResetEmail — delivers a 6-digit OTP for the forgot-password flow
+ *
+ * SMTP Provider:
+ *  The transporter is configured via env variables (SMTP_HOST, SMTP_PORT,
+ *  SMTP_USER, SMTP_PASS, SMTP_SENDER). Any SMTP-compatible provider works:
+ *  Brevo, SendGrid, Mailtrap (for testing), AWS SES, etc.
+ *
+ *  `secure: env.SMTP_PORT === 465` — TLS is used for port 465 (SMTPS);
+ *  STARTTLS is used for ports 587 and 25 (Nodemailer handles this automatically).
+ *
+ * Error handling:
+ *  On SMTP failure, the raw error is logged (for developers) and a generic
+ *  "Email could not be sent" error is thrown to the caller. This prevents
+ *  leaking internal SMTP configuration details in API error responses.
+ */
+
 // Import Nodemailer to send emails using an SMTP server
 import nodemailer from 'nodemailer';
 

@@ -1,5 +1,31 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// =============================================================================
+// NexusHub — Prisma Database Schema
+// =============================================================================
+// Database  : PostgreSQL (via @prisma/adapter-pg)
+// Generator : prisma-client-js
+//
+// Model overview:
+//  User              — Authenticated identities (email/password + OAuth)
+//  Workspace         — Top-level tenant/team container
+//  WorkspaceMember   — Junction table: User ↔ Workspace with role
+//  Channel           — Named rooms inside a Workspace (TEXT or VOICE)
+//  Message           — Chat messages posted in a Channel
+//  MessageAttachment — File/media attachments on a Message
+//  Task              — Kanban-style tasks scoped to a Workspace
+//  Document          — Collaborative documents scoped to a Workspace
+//  Session           — Refresh token store for the JWT auth system
+//  Notification      — In-app notifications for a User
+//  Subscription      — Billing plan for a Workspace (Stripe / Razorpay)
+//  Payment           — Individual payment records for a Workspace
+//  AiRequest         — AI prompt usage logs scoped to a Workspace
+//  File              — Uploaded file metadata scoped to a Workspace
+//
+// Enum overview:
+//  Tier        — FREE | PRO  (workspace billing tier)
+//  Role        — ADMIN | MEMBER | GUEST  (workspace membership role)
+//  ChannelType — TEXT | VOICE
+//  TaskStatus  — TODO | IN_PROGRESS | REVIEW | DONE
+// =============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -9,6 +35,13 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// User
+// Represents an authenticated identity. Supports both email/password and OAuth.
+//  - `password_hash` is an empty string for OAuth-only users.
+//  - `reset_otp` and `reset_otp_expires` are set during the forgot-password
+//    flow and cleared immediately after a successful password reset.
+// ---------------------------------------------------------------------------
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
@@ -17,26 +50,34 @@ model User {
   avatar_url    String?
   created_at    DateTime @default(now())
 
+  // Relations
   workspaces    Workspace[]
   memberships   WorkspaceMember[]
   messages      Message[]
   tasksCreated  Task[]            @relation("TaskCreator")
   tasksAssigned Task[]            @relation("TaskAssignee")
-
   sessions      Session[]
   notifications Notification[]
 
+  // OTP fields for the forgot-password flow; null when no reset is in progress
   reset_otp         String?
   reset_otp_expires DateTime?
 }
 
+// ---------------------------------------------------------------------------
+// Workspace
+// Top-level tenant container. Every resource (channels, tasks, docs, files)
+// belongs to exactly one Workspace. Workspaces have an owner (User) and
+// zero-or-more members (WorkspaceMember).
+// ---------------------------------------------------------------------------
 model Workspace {
   id       String @id @default(uuid())
   name     String
-  slug     String @unique
+  slug     String @unique  // URL-safe identifier (e.g. "my-team")
   owner_id String
   tier     Tier   @default(FREE)
 
+  // Relations
   owner     User              @relation(fields: [owner_id], references: [id])
   members   WorkspaceMember[]
   channels  Channel[]
@@ -44,92 +85,151 @@ model Workspace {
   documents Document[]
 
   subscription Subscription? // 1-to-1 relation (because workspace_id is @unique in Subscription)
-  payments     Payment[] // 1-to-many
-  ai_requests  AiRequest[] // 1-to-many
-  files        File[] // 1-to-many
+  payments     Payment[]     // 1-to-many
+  ai_requests  AiRequest[]   // 1-to-many
+  files        File[]        // 1-to-many
 }
 
+// ---------------------------------------------------------------------------
+// WorkspaceMember
+// Junction table that maps Users to Workspaces with an associated role.
+// Composite primary key: (workspace_id, user_id) ensures a user can only
+// be a member of a given workspace once.
+// ---------------------------------------------------------------------------
 model WorkspaceMember {
   workspace_id String
   user_id      String
   role         Role      @default(MEMBER)
   joined_at    DateTime  @default(now())
+
+  // Relations
   workspace    Workspace @relation(fields: [workspace_id], references: [id])
   user         User      @relation(fields: [user_id], references: [id])
 
   @@id([workspace_id, user_id])
 }
 
+// ---------------------------------------------------------------------------
+// Channel
+// A named room inside a Workspace where members can post messages.
+//  - TEXT channels are standard chat rooms.
+//  - VOICE channels are reserved for future real-time audio (WebRTC).
+//  - Private channels restrict visibility to invited members only.
+// ---------------------------------------------------------------------------
 model Channel {
   id           String      @id @default(uuid())
   workspace_id String
   name         String
   type         ChannelType @default(TEXT)
   is_private   Boolean     @default(false)
+
+  // Relations
   workspace    Workspace   @relation(fields: [workspace_id], references: [id])
   messages     Message[]
 }
 
+// ---------------------------------------------------------------------------
+// Message
+// A single chat message posted by a User in a Channel.
+//  - Soft deletion: `deleted_at` is set instead of removing the row, so
+//    attachments and reply threads remain intact.
+//  - `is_edited` flags messages that have been modified after posting.
+// ---------------------------------------------------------------------------
 model Message {
   id          String              @id @default(uuid())
   channel_id  String
   user_id     String
   content     String
   is_edited   Boolean             @default(false)
-  deleted_at  DateTime?
+  deleted_at  DateTime?           // null = not deleted; non-null = soft-deleted
   created_at  DateTime            @default(now())
+
+  // Relations
   channel     Channel             @relation(fields: [channel_id], references: [id])
   user        User                @relation(fields: [user_id], references: [id])
   attachments MessageAttachment[]
 }
 
+// ---------------------------------------------------------------------------
+// MessageAttachment
+// File or media attached to a Message. Stores a reference URL rather than
+// the binary data itself (files are stored in object storage, e.g. S3).
+// ---------------------------------------------------------------------------
 model MessageAttachment {
   id         String  @id @default(uuid())
   message_id String
-  file_url   String
-  file_type  String
+  file_url   String  // URL pointing to the object in storage
+  file_type  String  // MIME type (e.g. "image/png", "application/pdf")
+
+  // Relations
   message    Message @relation(fields: [message_id], references: [id])
 }
 
+// ---------------------------------------------------------------------------
+// Task
+// A work item (kanban card) scoped to a Workspace.
+//  - `creator_id` is always set; `assignee_id` is optional.
+//  - `priority` is an integer (lower = higher priority; define convention in app).
+//  - Status flows: TODO → IN_PROGRESS → REVIEW → DONE
+// ---------------------------------------------------------------------------
 model Task {
   id           String     @id @default(uuid())
   workspace_id String
   creator_id   String
-  assignee_id  String?
+  assignee_id  String?    // nullable — tasks may be unassigned
   title        String
   description  String?
   status       TaskStatus @default(TODO)
   priority     Int        @default(1)
+
+  // Relations — named relations distinguish creator vs. assignee on the User model
   workspace    Workspace  @relation(fields: [workspace_id], references: [id])
   creator      User       @relation("TaskCreator", fields: [creator_id], references: [id])
   assignee     User?      @relation("TaskAssignee", fields: [assignee_id], references: [id])
 }
 
+// ---------------------------------------------------------------------------
+// Document
+// A collaborative rich-text document scoped to a Workspace.
+//  - `content_state` stores the serialised editor state (e.g. ProseMirror JSON
+//    or Lexical JSON) as raw bytes.
+//  - `updated_at` is automatically set by Prisma on every update.
+// ---------------------------------------------------------------------------
 model Document {
   id            String    @id @default(uuid())
   workspace_id  String
   title         String
-  content_state Bytes?
+  content_state Bytes?    // serialised editor state (e.g. Lexical / ProseMirror JSON)
   updated_at    DateTime  @updatedAt
+
+  // Relations
   workspace     Workspace @relation(fields: [workspace_id], references: [id])
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+// Workspace billing tier — drives feature limits and subscription checks
 enum Tier {
   FREE
   PRO
 }
 
+// Workspace membership roles — used for permission checks
 enum Role {
-  ADMIN
-  MEMBER
-  GUEST
+  ADMIN   // Full workspace management rights
+  MEMBER  // Standard access (read/write channels, tasks, docs)
+  GUEST   // Read-only or limited access (define in app layer)
 }
 
+// Channel types — TEXT is live; VOICE is reserved for future WebRTC integration
 enum ChannelType {
   TEXT
   VOICE
 }
 
+// Task lifecycle states following a standard kanban flow
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -137,59 +237,113 @@ enum TaskStatus {
   DONE
 }
 
+// ---------------------------------------------------------------------------
+// Session
+// Stores refresh tokens for the JWT dual-token auth strategy.
+//  - One refresh token per login session.
+//  - `onDelete: Cascade` ensures sessions are automatically removed when
+//    the parent User is deleted.
+//  - `refresh_token` is @unique so Prisma can efficiently look it up on refresh.
+// ---------------------------------------------------------------------------
 model Session {
   id            String   @id @default(uuid())
   user_id       String
   refresh_token String   @unique
   expires_at    DateTime
   created_at    DateTime @default(now())
+
+  // Relations
   user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
+// ---------------------------------------------------------------------------
+// Notification
+// In-app notifications delivered to a specific User.
+//  - `is_read` tracks whether the user has seen the notification.
+//  - `onDelete: Cascade` removes notifications when the user is deleted.
+// ---------------------------------------------------------------------------
 model Notification {
   id         String   @id @default(uuid())
   user_id    String
   message    String
   is_read    Boolean  @default(false)
   created_at DateTime @default(now())
+
+  // Relations
   user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
+// ---------------------------------------------------------------------------
+// Subscription
+// Billing plan record for a Workspace.
+//  - 1-to-1 with Workspace (enforced by @unique on workspace_id).
+//  - Supports both Stripe and Razorpay payment gateway IDs.
+//  - `valid_until` tracks the subscription expiry for time-limited plans.
+// ---------------------------------------------------------------------------
 model Subscription {
   id           String    @id @default(uuid())
-  workspace_id String    @unique
+  workspace_id String    @unique   // enforces 1-to-1 with Workspace
   plan_tier    Tier      @default(FREE)
-  stripe_id    String?
-  razorpay_id  String?
-  valid_until  DateTime?
+  stripe_id    String?   // Stripe subscription or customer ID
+  razorpay_id  String?   // Razorpay subscription or order ID
+  valid_until  DateTime? // null for perpetual FREE tier
+
+  // Relations
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
 
+// ---------------------------------------------------------------------------
+// Payment
+// Individual payment transaction records tied to a Workspace.
+//  - One Workspace can have many Payments (history of charges).
+//  - `currency` defaults to INR (can be changed per transaction).
+//  - `status` is a free-form string to accommodate both Stripe and Razorpay
+//    status vocabularies (e.g. "paid", "failed", "refunded").
+// ---------------------------------------------------------------------------
 model Payment {
   id           String    @id @default(uuid())
   workspace_id String
   amount       Float
   currency     String    @default("INR")
-  status       String
+  status       String    // e.g. "paid" | "failed" | "refunded"
   created_at   DateTime  @default(now())
+
+  // Relations
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
 
+// ---------------------------------------------------------------------------
+// AiRequest
+// Audit log of AI feature usage per Workspace.
+//  - Enables token-based billing and usage analytics.
+//  - `tokens_used` records the number of LLM tokens consumed per request.
+// ---------------------------------------------------------------------------
 model AiRequest {
   id           String    @id @default(uuid())
   workspace_id String
   prompt       String
   tokens_used  Int
   created_at   DateTime  @default(now())
+
+  // Relations
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
 
+// ---------------------------------------------------------------------------
+// File
+// Metadata for files uploaded by users to a Workspace.
+//  - The binary content is stored in an external object store (e.g. S3, R2).
+//  - `file_url` points to the public or presigned URL of the stored object.
+//  - `size_bytes` enables storage quota enforcement per workspace.
+// ---------------------------------------------------------------------------
 model File {
   id           String    @id @default(uuid())
   workspace_id String
-  uploader_id  String
-  file_url     String
-  size_bytes   Int
+  uploader_id  String    // user who uploaded the file
+  file_url     String    // URL to object in storage (S3, R2, etc.)
+  size_bytes   Int       // used for quota tracking
   created_at   DateTime  @default(now())
+
+  // Relations
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
