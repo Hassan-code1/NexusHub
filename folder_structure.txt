@@ -1,3 +1,5 @@
+Folder structure for d:\Workspace\NexusHub
+
 NexusHub/
 ├── apps/
 │   ├── api/
@@ -22,7 +24,8 @@ NexusHub/
 │   │   │   ├── middlewares/
 │   │   │   │   ├── errorHandler.ts
 │   │   │   │   ├── rateLimiter.ts
-│   │   │   │   └── requireAuth.ts
+│   │   │   │   ├── requireAuth.ts
+│   │   │   │   └── requireRole.ts
 │   │   │   ├── routes/
 │   │   │   │   ├── auth.ts
 │   │   │   │   └── health.ts
@@ -61,9 +64,11 @@ NexusHub/
 │   │   └── src/
 │   │   │   └── index.ts
 │   └── ui/
+├── API_DOCUMENTATION.md
 ├── docker-compose.yml
 ├── folder_structure.txt
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
+├── Readme.md
 └── turbo.json
