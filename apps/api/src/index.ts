@@ -14,7 +14,7 @@
  *  3. json      — parses incoming JSON request bodies
  *  4. cookies   — parses Cookie header into req.cookies
  *  5. morgan    — HTTP request logging (piped to Winston)
- *  6. routers   — feature-specific route handlers
+ *  6. routers   — feature-specific route handlers (health, auth, workspaces, …)
  *  7. error     — global error handler (must be last)
  */
 
@@ -33,6 +33,7 @@ import { verifyDatabaseConnection } from './utils/db'; // Import the new DB util
 
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
+import workspaceRouter from './routes/workspace';
 
 const app = express();
 
@@ -65,6 +66,9 @@ app.use('/api/health', healthRouter);
 
 // All authentication & identity endpoints (register, login, OAuth, etc.)
 app.use('/api/auth/', authRouter);
+
+// Workspace management endpoints (create, list, delete workspaces; RBAC-protected)
+app.use('/api/workspaces', workspaceRouter);
 
 // --- Global Error Handler ---
 // Must be registered AFTER all routes so it catches errors passed via next(err)

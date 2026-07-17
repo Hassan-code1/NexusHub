@@ -23,6 +23,10 @@
     - [POST /api/auth/forgot-password](#post-apiauthforgot-password)
     - [POST /api/auth/reset-password](#post-apiauthreset-password)
     - [GET /api/auth/me](#get-apiauthme)
+  - [Workspaces](#workspaces)
+    - [POST /api/workspaces](#post-apiworkspaces)
+    - [GET /api/workspaces](#get-apiworkspaces)
+    - [DELETE /api/workspaces/:workspaceId](#delete-apiworkspacesworkspaceid)
 - [Response Schemas](#response-schemas)
 - [Adding New Endpoints](#adding-new-endpoints)
 
@@ -36,7 +40,7 @@ NexusHub exposes a RESTful JSON API built on **Express 5**, backed by **PostgreS
 |--------|--------|--------|
 | System health | `/api/health` | ✅ Live |
 | Authentication | `/api/auth` | ✅ Live |
-| Workspaces | `/api/workspaces` | 🚧 Planned |
+| Workspaces | `/api/workspaces` | ✅ Live |
 | Channels & Messaging | `/api/channels` | 🚧 Planned |
 | Tasks | `/api/tasks` | 🚧 Planned |
 | Documents | `/api/documents` | 🚧 Planned |
@@ -72,7 +76,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> **Security note:** The `refreshToken` cookie is `HttpOnly`, `SameSite=Strict` (login) / `SameSite=Lax` (OAuth), and `Secure` in production. It is never accessible via JavaScript.
+> **Security note:** The `refreshToken` cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` in production. It is never accessible via JavaScript.
 
 ---
 
@@ -197,7 +201,7 @@ All authentication routes live under `/api/auth`.
 |--------|-------|
 | `400 Bad Request` | Malformed request body |
 | `429 Too Many Requests` | Rate limit exceeded |
-| `500 Internal Server Error` | Email already taken (Prisma unique constraint violation — will return a generic 500 until a conflict handler is added) |
+| `500 Internal Server Error` | Email already taken (Prisma unique constraint — conflict handler not yet implemented) |
 
 **Example (curl)**
 
@@ -391,7 +395,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 }
 ```
 
-> **Note:** This endpoint currently returns the raw decoded JWT payload, not a full user profile from the database. A dedicated `/me` route that fetches the full profile (`name`, `email`, `avatar_url`, etc.) from the database is recommended for production.
+> **Note:** This endpoint returns the raw decoded JWT payload, not a full database profile. A future enhancement will fetch `name`, `email`, and `avatar_url` from the `User` table directly.
 
 **Error Responses**
 
@@ -403,6 +407,186 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ```bash
 curl http://localhost:5000/api/auth/me \
+  -H "Authorization: Bearer <your_access_token>"
+```
+
+---
+
+### Workspaces
+
+All workspace routes live under `/api/workspaces`. **Every route in this group requires authentication** — there are no public workspace endpoints.
+
+**RBAC (Role-Based Access Control):**  
+Workspace membership is stored in the `WorkspaceMember` table with one of three roles:
+
+| Role | Description |
+|------|-------------|
+| `ADMIN` | Full management rights — can delete workspace, manage members |
+| `MEMBER` | Standard access — read/write channels, tasks, documents |
+| `GUEST` | Limited read-only access (enforced at the application layer) |
+
+Role checks are performed by the `requireRole` middleware, which queries the `WorkspaceMember` table on every protected request using the `(workspace_id, user_id)` composite index.
+
+---
+
+#### `POST /api/workspaces`
+
+> Creates a new workspace. The authenticated user is automatically assigned as the workspace `ADMIN` owner. Workspace creation and membership assignment are executed in a single database transaction — if either step fails, both are rolled back.
+>
+> A unique URL-safe slug is auto-generated from the workspace name with a 6-character random hex suffix (e.g. `"engineering-team-a1b2c3"`).
+
+**Authentication required:** ✅ Yes (`Bearer <accessToken>`)  
+**Rate limited:** No  
+**Role required:** None (any authenticated user can create a workspace)
+
+**Request Body**
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `name` | `string` | ✅ | Non-empty workspace display name |
+
+```json
+{
+  "name": "Engineering Team"
+}
+```
+
+**Response — `201 Created`**
+
+```json
+{
+  "success": true,
+  "workspace": {
+    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "name": "Engineering Team",
+    "slug": "engineering-team-a1b2c3",
+    "owner_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "tier": "FREE"
+  }
+}
+```
+
+**Error Responses**
+
+| Status | Cause |
+|--------|-------|
+| `401 Unauthorized` | Missing or invalid access token |
+| `500 Internal Server Error` | Database transaction failure |
+
+**Example (curl)**
+
+```bash
+curl -X POST http://localhost:5000/api/workspaces \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_access_token>" \
+  -d '{"name":"Engineering Team"}'
+```
+
+---
+
+#### `GET /api/workspaces`
+
+> Returns all workspaces the authenticated user is a member of — including workspaces they own and workspaces they have joined via invitation. Membership is determined by the `WorkspaceMember` junction table, so this covers all roles (`ADMIN`, `MEMBER`, `GUEST`).
+
+**Authentication required:** ✅ Yes (`Bearer <accessToken>`)  
+**Rate limited:** No  
+**Role required:** None (any workspace member can list their workspaces)
+
+**Request**
+
+```http
+GET /api/workspaces HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Response — `200 OK`**
+
+```json
+{
+  "success": true,
+  "workspaces": [
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Engineering Team",
+      "slug": "engineering-team-a1b2c3",
+      "owner_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "tier": "FREE"
+    },
+    {
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Design Team",
+      "slug": "design-team-d4e5f6",
+      "owner_id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+      "tier": "PRO"
+    }
+  ]
+}
+```
+
+Returns an empty array `[]` if the user has no workspace memberships.
+
+**Error Responses**
+
+| Status | Cause |
+|--------|-------|
+| `401 Unauthorized` | Missing or invalid access token |
+
+**Example (curl)**
+
+```bash
+curl http://localhost:5000/api/workspaces \
+  -H "Authorization: Bearer <your_access_token>"
+```
+
+---
+
+#### `DELETE /api/workspaces/:workspaceId`
+
+> Deletes a workspace by its UUID. Only workspace members with the `ADMIN` role can perform this action.
+>
+> **Note:** This endpoint is currently a functional placeholder — it returns a success message but does not yet perform a hard delete on the database row. Full cascading deletion (channels, tasks, documents, files) will be implemented in a future update.
+
+**Authentication required:** ✅ Yes (`Bearer <accessToken>`)  
+**Rate limited:** No  
+**Role required:** `ADMIN` (enforced by `requireRole` middleware)
+
+**URL Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `workspaceId` | `string` (UUID) | ✅ | The ID of the workspace to delete |
+
+**Request**
+
+```http
+DELETE /api/workspaces/b2c3d4e5-f6a7-8901-bcde-f12345678901 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Response — `200 OK`**
+
+```json
+{
+  "success": true,
+  "message": "Workspace deleted successfully."
+}
+```
+
+**Error Responses**
+
+| Status | Cause |
+|--------|-------|
+| `401 Unauthorized` | Missing or invalid access token |
+| `401 Unauthorized` | `workspaceId` param is missing |
+| `403 Forbidden` | Authenticated user is not a member of this workspace |
+| `403 Forbidden` | Authenticated user's role is not `ADMIN` |
+
+**Example (curl)**
+
+```bash
+curl -X DELETE http://localhost:5000/api/workspaces/b2c3d4e5-f6a7-8901-bcde-f12345678901 \
   -H "Authorization: Bearer <your_access_token>"
 ```
 
@@ -425,11 +609,11 @@ curl http://localhost:5000/api/auth/me \
 {
   success: false;
   message: string;       // Human-readable error
-  stack?: string;        // Stack trace (development only)
+  stack?: string;        // Stack trace (development only, redacted in production)
 }
 ```
 
-### `User` (JWT payload shape, from `/api/auth/me`)
+### `User` (JWT payload shape — from `/api/auth/me`)
 
 ```typescript
 {
@@ -439,12 +623,24 @@ curl http://localhost:5000/api/auth/me \
 }
 ```
 
-### `AccessToken`
+### `AccessToken` (from `POST /api/auth/login`)
 
 ```typescript
 {
   success: true;
   accessToken: string;  // Signed JWT, 15-minute lifetime
+}
+```
+
+### `Workspace` (from workspace endpoints)
+
+```typescript
+{
+  id:       string;   // UUID
+  name:     string;   // Display name
+  slug:     string;   // URL-safe unique identifier (e.g. "engineering-team-a1b2c3")
+  owner_id: string;   // UUID of the user who created the workspace
+  tier:     "FREE" | "PRO";
 }
 ```
 
@@ -483,10 +679,15 @@ apps/api/src/routes/<domain>.ts
 import { Router } from 'express';
 import { myHandler } from '../controllers/<domain>.controller';
 import { requireAuth } from '../middlewares/requireAuth';
+import { requireRole } from '../middlewares/requireRole';
 
 const router = Router();
 
-router.get('/my-route', requireAuth, myHandler);
+// Apply auth globally if all routes are protected
+router.use(requireAuth);
+
+// RBAC — restrict to specific workspace roles
+router.delete('/:workspaceId/resource', requireRole(['ADMIN']), myHandler);
 
 export default router;
 ```
@@ -495,6 +696,7 @@ export default router;
 
 ```typescript
 import myRouter from './routes/<domain>';
+// Add a descriptive comment explaining the domain
 app.use('/api/<domain>', myRouter);
 ```
 
@@ -502,13 +704,14 @@ app.use('/api/<domain>', myRouter);
 
 Add a new `###` section under the appropriate domain heading above. Follow the existing format:
 
-- Method badge & path
-- Description paragraph
-- Authentication / rate-limit flags
+- Method + path as heading
+- One-line description blockquote
+- `Authentication required` / `Rate limited` / `Role required` flags
 - Request body table + JSON example
-- Response examples for success and all error cases
+- Response `200` JSON example
+- Error response table
 - `curl` example
 
 ---
 
-*Last updated: 2026-07-09 — NexusHub API v1*
+*Last updated: 2026-07-17 — NexusHub API v1*

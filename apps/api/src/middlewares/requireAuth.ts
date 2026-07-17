@@ -11,13 +11,15 @@
  * Token payload shape (as signed in auth.controller.ts):
  *  { id: string, iat: number, exp: number }
  *
+ * Type safety:
+ *  `req.user` is typed via the Express module augmentation in
+ *  `src/types/express.d.ts`, which merges `user?: User` into Express.Request.
+ *  The remaining `@ts-ignore` on the assignment line can be removed once the
+ *  JWT decode shape is confirmed to match the shared `User` type exactly.
+ *
  * Failure modes:
  *  - Missing / malformed header  → 401 "Access denied"
  *  - Expired or tampered token   → 401 "Invalid or expired token"
- *
- * TODO: Replace the @ts-ignore with a proper Express type augmentation:
- *   // types/express/index.d.ts
- *   declare namespace Express { interface Request { user?: JwtPayload } }
  */
 
 import {Request, Response, NextFunction} from 'express'
